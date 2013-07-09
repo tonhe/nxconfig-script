@@ -514,8 +514,8 @@ function gather_info {
   # Site codes are used as the second octed.. 
   # i.e. Site A ==  10.10.0.0/16
   echo "##   Site Codes"
-  echo "##     A = 10"
-  echo "##     B = 20"
+  echo "##     TD = 254"
+  echo "##     HS = 248"
   echo "##"
 
   while :; do
@@ -524,8 +524,8 @@ function gather_info {
       read -e -r -p "What site are we making changes at?: " SITE
       case $SITE in
   	# CHANGE_ME -- add your site codes here...
-        10) break;;
-        20) break;;
+        254) break;;
+        248) break;;
       esac
     done
 
@@ -870,8 +870,8 @@ while :; do
   
 	    # CHANGE_ME
 	    # These should match your 5k01 and 5k02 IPs
-            check_existing_config 10.$SITE.10.10 5k
-            check_existing_config 10.$SITE.10.11 5k
+            check_existing_config 10.$SITE.194.10 5k
+            check_existing_config 10.$SITE.194.11 5k
 
 	    # CHANGE_ME
 	    # These should match your 5k01 and 5k02 IPs
@@ -975,8 +975,8 @@ while :; do
               echo "This site has 2 possible 1000v switches...."
               echo 
 	      # CHANGE_ME
-              echo "  1. Cluster A - 10.20.1.16"
-              echo "  2. Cluster B - 10.20.1.17"
+              echo "  1. B230 M1 Cluster - 10.254.196.16"
+              echo "  2. B230 M2 Cluster - 10.254.196.17"
 
               # TODO - add an option for BOTH... 
 
@@ -986,18 +986,18 @@ while :; do
   
                 case $SEL in
                   1)
-	            #CHANGE_ME 1000v-1 IP for SITE20
-                    IP_1000v="10.$SITE.1.16"
+	            #CHANGE_ME 1000v-A IP for SITE20
+                    IP_1000v="10.$SITE.196.16"
                     break;;
                   2)
-	            #CHANGE_ME 1000v-2 IP for SITE20
-                    IP_1000v="10.$SITE.1.17"
+	            #CHANGE_ME 1000v-B IP for SITE20
+                    IP_1000v="10.$SITE.196.17"
                     break;;
                 esac 
               done
             else
 	      #CHANGE_ME 1000v IP for SITE10
-              IP_1000v="10.$SITE.1.16"
+              IP_1000v="10.$SITE.196.16"
             fi
 
             dprint "1000v IP set to $IP_1000v"
