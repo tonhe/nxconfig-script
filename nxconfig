@@ -1,0 +1,1034 @@
+#!/bin/bash
+VERSION=0.4.1
+#
+# nxconfig 
+# Created by Tony Mattke on 6/30/13
+# Copyright 2013 Tony Mattke. All rights reserved.
+# http://routerjockey.com tony@mattke.net http://twitter.com/tonhe
+#
+######## variables
+DEBUG=0   # Displays Debug Information
+VERIFY_INFO=0 # Requires most inputs to be verified
+DELETE_ON_EXIT=1  # Deletes data files created (more secure)
+TMPDIR=~/.nxconfig
+CF_CORE01=$TMPDIR/core01.config
+CF_CORE02=$TMPDIR/core02.config
+CF_5K=$TMPDIR/5k.config
+CF_1000v=$TMPDIR/1000v.config
+EX_CORE01=$TMPDIR/core01.expect
+EX_CORE02=$TMPDIR/core02.expect
+EX_5K01=$TMPDIR/5k01.expect
+EX_5K02=$TMPDIR/5k02.expect
+EX_1000v=$TMPDIR/1000v.expect
+PRE_CONFIG=0
+USER_INFO=0
+EXPECT=/usr/bin/expect
+
+######## init
+mkdir $TMPDIR 2>/dev/null
+rm $TMPDIR/*.config 2>/dev/null
+rm $TMPDIR/*.expect 2>/dev/null
+
+######## functions
+
+function dprint {
+  if [ $DEBUG -eq 1 ]; then
+    echo \(d\) ${1}
+   fi
+}
+
+function check_existing_config {
+  dprint "-> entering check_existing_config"
+  IP=${1}
+  DEVICE_TYPE=${2}
+  FILE=$TMPDIR/check.expect
+
+
+  echo 
+  echo "checking config on $IP..."
+  echo
+
+cat > $FILE << EOF
+proc do_exit {msg {code 1}} {
+        puts stderr \$msg
+        exit \$code
+}
+  exp_internal $DEBUG 
+  set timeout 31
+  spawn ssh $USERNAME@$IP
+  match_max 100000
+  set needPass 0
+
+  expect {
+    timeout { do_exit "\nERROR: Timeout Exceeded - Check Host\n"; }
+    eof { do_exit "\nERROR: SSH Connection To $IP Failed\n"; }
+    "*#" {}
+    "*>" {}
+    "assword:" { 
+      send "$PASSWORD\n"
+      expect {
+        "*#" {}
+        "*>" {}
+        "assword" { do_exit "\nERROR: Invalid Username or Password\n" 2; }
+      }
+    }
+    "*Are you sure" { 
+      send "yes\n"
+      expect {
+        "*#" {}
+        "*>" {}
+        "*assword:" { 
+          send "$PASSWORD\n";
+          expect {
+            "*#" {}
+            "*>" {}
+            "*assword" { do_exit "\nERROR: Invalid Username or Password\n" 2; }
+          }
+        }
+      }
+    }
+  }
+
+
+  # If we're not already in enable mode, get us there
+  send "\n"
+  expect {
+    default { do_exit "\nEnable Mode Failed - Check Password\n"; }
+    "*#" {}
+    "*>" {
+      send "enable\n"
+      expect "*assword"
+      send "$PASSWORD\n"
+      expect "*#"
+    }
+  }
+
+  # disable paging
+  send -- "terminal length 0\r"
+  expect "#"
+EOF
+
+  case $DEVICE_TYPE in
+    core)
+cat >> $FILE << EOF
+send "sh run int vlan $VLAN\n"
+  expect {
+    "*Invalid range" {}
+    "*interface Vlan$VLAN" { do_exit "ERROR: SVI Exists on $IP !!!\n"; } 
+  }
+
+send "sh vlan id $VLAN\n"
+  expect {
+    "*VLAN $VLAN not found" {}
+    "*Status" { do_exit "ERROR: VLAN Exists on $IP !!!\n"; }
+  }
+EOF
+   ;;
+   5k)
+cat >> $FILE << EOF
+send "sh vlan id $VLAN\n"
+  expect {
+    "*VLAN $VLAN not found" {}
+    "*VLAN Name" { do_exit "ERROR: VLAN Exists on $IP !!!\n"; }
+  }
+EOF
+   ;;
+   1000v)
+cat >> $FILE << EOF
+send "sh vlan id $VLAN\n"
+  expect {
+    "*VLAN $VLAN not found" {}
+    "*VLAN Name" { do_exit "ERROR: VLAN Exists on $IP !!!\n"; }
+  }
+send "sh run port-profile | i veth.*$VLAN \n"
+  expect {
+    "*#" {}
+    "*port*" { do_exit "ERROR: Port-Profile Exists on $IP !!!!\n"; }
+  }
+EOF
+   ;;
+ esac
+
+cat >> $FILE << EOF
+send "end"
+send "exit"
+EOF
+
+ dprint "Executing expect script..."
+
+  if [ $DEBUG -eq 1 ]; then
+    $EXPECT -f $FILE
+  else
+    $EXPECT -f $FILE 1>/dev/null
+  fi
+
+  EC=$? ## store the exit code.
+
+  # Read the exit code of EXPECT, if it isn't 0 there was an issue... 
+  if [ $EC -eq 1 ] ; then
+    echo 
+    echo 
+    echo 
+    echo 
+    echo "***NOTICE***"
+    echo
+    echo
+    echo
+    echo "Our automated checks noticed existing configuration on this device which "
+    echo "overlaps with what you're trying to do..."
+    echo 
+    echo
+    echo "No configuration changes were made. This program will now end."
+    echo 
+    echo
+    echo
+    echo
+    echo 
+    echo "GAME OVER"
+    echo 
+    echo
+    echo
+    echo
+    exit 1
+
+  elif [ $EC -eq 2 ] ; then
+
+    echo 
+    echo 
+    echo 
+    echo 
+    echo "***NOTICE***"
+    echo
+    echo
+    echo "An error occured. See output above."
+    echo
+    echo "No configuration changes were made. This program will now end."
+    echo 
+    echo
+    echo
+    echo 
+    echo "GAME OVER"
+    echo 
+    echo
+    echo
+    echo
+    exit 1
+  else 
+    return 0
+  fi
+}
+
+
+function generate_expect_script {
+dprint "-> entering generate_expect_script"
+
+ IP=${1}
+ CONFIG=${2}
+ FILE=${3}
+
+ dprint "IP($IP)"
+ dprint "CONFIG($CONFIG)"
+ dprint "FILE($FILE)"
+
+cat > $FILE << EOF
+proc do_exit {msg {code 1}} {
+        puts stderr \$msg
+        exit \$code
+}
+  exp_internal $DEBUG 
+  set timeout 31
+  spawn ssh $USERNAME@$IP
+  match_max 100000
+
+
+  expect {
+    timeout { do_exit "\nERROR: Timeout Exceeded - Check Host\n"; }
+    eof { do_exit "\nERROR: SSH Connection To $IP Failed\n"; }
+    "*#" {}
+    "*>" {}
+    "assword:" { 
+      send "$PASSWORD\n"
+      expect {
+        "*#" {}
+        "*>" {}
+        "assword" { do_exit "\nERROR: Invalid Username or Password\n" 2; }
+      }
+    }
+    "*Are you sure" { 
+      send "yes\n"
+      expect {
+        "*#" {}
+        "*>" {}
+        "*assword:" { 
+          send "$PASSWORD\n";
+          expect {
+            "*#" {}
+            "*>" {}
+            "*assword" { do_exit "\nERROR: Invalid Username or Password\n" 2; }
+          }
+        }
+      }
+    }
+  }
+
+  # If we're not already in enable mode, get us there
+  send "\n"
+  expect {
+    default { do_exit "\nEnable Mode Failed - Check Password\n"; }
+    "*#" {}
+    "*>" {
+      send "enable\n"
+      expect "*assword"
+      send "$PASSWORD\n"
+      expect "*#"
+    }
+  }
+
+  # disable paging
+  send -- "terminal pager 0\n"
+  expect "#"
+
+  send -- "configure terminal\n"
+  expect "(config)#"
+EOF
+
+  oIFS=$IFS
+  IFS=$'\x0A'$'\x0D'
+
+  dprint "-> entering for loop: Config file: $CONFIG"  
+
+  LN=0
+
+  for LINE in `cat $CONFIG`; do 
+    if [[ $LINE != *!* ]]; then
+      LN=$(($LN+1))
+cat >> $FILE << EOF
+send "$LINE\n"
+expect {
+  "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
+  "*#" {}
+}
+EOF
+    fi
+  done
+
+  dprint "<- exiting for loop... "
+
+  IFS=$oIFS
+
+cat >> $FILE << EOF
+send "end\n"
+expect {
+  "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
+  "*#" {}
+}
+# I only wait for the copy to start, then we bail.. :)
+send "copy run start\n"
+expect {
+  "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
+  "*Copy complete" {}
+}
+EOF
+
+  dprint "<- exiting generate_expect_script"
+}
+
+
+function generate_1000v_config {
+  dprint "-> entering generate_1000v_config"
+
+cat > $CF_1000v << EOF
+!
+vlan $VLAN
+ name $DESC
+!
+port-profile type ethernet system_uplink
+  switchport trunk allowed vlan add $VLAN
+!
+port-profile type vethernet VLAN$VLAN
+  vmware port-group
+  switchport mode access
+  switchport access vlan $VLAN
+  no shutdown
+  state enabled
+!
+!
+EOF
+
+  dprint "<- exiting generate_1000v_config"
+}
+
+
+
+function generate_5k_config {
+  dprint "-> entering generate_5k_config"
+
+cat > $CF_5K << EOF
+!
+vlan $VLAN
+ name $DESC
+!
+EOF
+
+  if [ $UCS_TRUNK -eq 1 ]; then
+cat >> $CF_5K << EOF
+int port-channel 201 - 202
+ switchport trunk allowed vlan add $VLAN
+!
+EOF
+  fi
+
+  dprint "<- exiting generate_5k_config"
+}
+
+
+
+function generate_core_config {
+  TMP=$TMPDIR/temp-core.config
+
+  dprint "-> entering generate_core_config"
+
+  for (( i=1; i<=2; i++ )) do 
+
+cat > $TMP << EOF
+!
+vlan $VLAN
+ name $DESC
+!
+interface Vlan$VLAN
+  no shutdown
+  description $DESC
+  no ip redirects
+EOF
+
+    if [ $i -eq 1 ]; then 
+      echo "  ip address $IP_CORE01" >> $TMP
+    else
+      echo "  ip address $IP_CORE02" >> $TMP
+    fi
+
+cat >> $TMP << EOF
+  ip ospf passive-interface
+  ip router ospf 1 area 0.0.0.0
+  hsrp version 2
+  hsrp $VLAN
+    ip $IP_HSRP
+    authentication md5 key-chain tcu-hsrp
+    preempt delay minimum 180
+EOF
+
+    if [ $i -eq 1 ]; then 
+      echo "    priority 105" >> $TMP
+    else 
+      echo "    priority 100" >> $TMP
+    fi
+  
+    if [ $i -eq 1 ]; then 
+      dprint "mv $TMP $CF_CORE01"
+      mv $TMP $CF_CORE01
+    else 
+      dprint "mv $TMP $CF_CORE02"
+      mv $TMP $CF_CORE02
+    fi
+
+  done # for 1,2
+
+  dprint "<- exiting generate_core_config"
+}
+
+function print_header {
+clear
+echo "
+################################################################################
+##
+##  nxconfig tool v$VERSION
+##
+##"
+}
+
+function read_correct {
+
+  if [ $VERIFY_INFO -eq 1 ]; then 
+    while :; do
+      read -e -r -p "You entered $1, does this look correct? (Y/n): " SEL
+      case $SEL in
+        [yY][eE][sS]|[yY]|"") 
+          dprint "correct: Yes!"
+          return 0;;  # Yes, this looks backwards. 0 is good.
+        [nN][oO]|[nN]) 
+          dprint "correct: no :("
+          return 1;;
+        *);;
+      esac
+    done
+  else 
+    return 0
+  fi
+}
+
+
+function gather_user_info {
+  while :; do
+    echo
+    read -e -r -p "Username: " USERNAME
+
+    if read_correct $USERNAME; then 
+      break;
+    fi
+  done
+
+  dprint "Username ($USERNAME)"
+
+  while :; do
+    echo
+    read -e -r -s -p "Password: " PASSWORD
+    echo
+    read -e -r -s -p "Verify Password: " PASSWORD2
+    echo
+
+    if [ "$PASSWORD" == "$PASSWORD2" ]; then
+      dprint "Passwords match... "
+      break;
+    else 
+      dprint "Password error..."
+    fi
+
+  done
+}
+
+
+function gather_info {
+
+  print_header
+  echo "##   Site Codes"
+  echo "##     TD = 254"
+  echo "##     HS = 248"
+  echo "##"
+
+  while :; do
+    while :; do
+      echo
+      read -e -r -p "What site are we making changes at?: " SITE
+      case $SITE in
+        254) break;;
+        248) break;;
+      esac
+    done
+
+  if read_correct $SITE; then 
+    break;
+  fi
+
+  done
+ 
+  dprint "SiteCode ($SITE)"
+
+
+  while :; do
+    while :; do
+      echo
+      read -e -r -p "What VLAN number are we adding ?: " VLAN
+      if [[ $VLAN =~ ^[0-9]+$ ]]; then
+        if [[ $VLAN -ge 1 && $VLAN -le 4096 ]]; then 
+          break
+        fi
+      fi
+      echo "Valid range 1-4096..."
+    done
+  
+    if read_correct $VLAN; then 
+      break;
+    fi
+
+  done 
+
+  dprint "VLAN ($VLAN)"
+
+  while :; do
+    while :; do
+      echo 
+      read -e -r -p "What is the description for this VLAN?: " DESC
+      case $DESC in  
+
+        *\ * ) 
+          echo "no spaces allowed..." 
+          ;;
+
+        *) 
+          if [ ${#DESC} -gt 32 ]; then 
+            echo "must be less than 32 characters..."
+          else 
+            break
+          fi
+          ;;
+
+      esac
+    done
+
+    if read_correct $DESC; then 
+      break;
+    fi
+
+  done
+
+  dprint "VLAN Description ($DESC)"
+}
+
+function valid_ip() {
+  local  ip=$1
+  local  stat=1
+
+  if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    OIFS=$IFS
+    IFS='.'
+    ip=($ip)
+    IFS=$OIFS
+    [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+      stat=$?
+  fi
+return $stat
+}
+
+function gather_ip_info {
+
+  while :; do
+    echo
+    echo "Using the following IP scheme..." 
+    echo 
+    echo " Core01 VLAN $VLAN - 10.$SITE.$VLAN.2/24" 
+    echo " Core02 VLAN $VLAN - 10.$SITE.$VLAN.3/24"
+    echo " HSRP VLAN $VLAN - 10.$SITE.$VLAN.1"    
+    echo 
+    read -e -r -p "Is this information correct ? (Y/n): " SEL
+
+    case $SEL in
+
+      [yY][eE][sS]|[yY]|"")
+        dprint "using default /24"
+        IP_CORE01="10.$SITE.$VLAN.2/24"
+        IP_CORE02="10.$SITE.$VLAN.3/24"
+        IP_HSRP="10.$SITE.$VLAN.1"
+        break;;
+
+      [nN][oO]|[nN])
+        dprint "generating new IP information..."
+
+        while :; do
+          echo
+          read -e -r -p "Enter the network address in CIDR format: " INPUT
+  
+          HOSTS=`ipcalc $INPUT | awk '/Hosts/{ print $2 }'`
+          CIDR=`ipcalc $INPUT | awk '/Network/{ print $2 }'`
+          NETWORK=`echo $CIDR | cut -d / -f1`
+  
+          dprint "number of hosts calculated: $HOSTS"
+          dprint "CIDR Address Calculated  $CIDR"
+          dprint "Network Address Calculated  $NETWORK"
+
+          if valid_ip $NETWORK && [ $HOSTS -ge 8 ] ; then 
+            dprint "initial IP checks look good..."
+            FIRST=`echo $CIDR | cut -d . -f1-3`
+            LAST=`echo $CIDR | cut -d . -f 4 | cut -d / -f1`
+            SLASH=`echo $CIDR | cut -d / -f2`
+            
+            IP_TMP=$((LAST + 2))
+            IP_CORE01="$FIRST.$IP_TMP/$SLASH"
+            IP_TMP=$((LAST + 3))
+            IP_CORE02="$FIRST.$IP_TMP/$SLASH"
+            IP_TMP=$((LAST + 1))
+            IP_HSRP="$FIRST.$IP_TMP"
+
+            dprint "IP_CORE01 $IP_CORE01"
+            dprint "IP_CORE02 $IP_CORE02"
+            dprint "IP_HSRP $IP_HSRP"
+  
+            echo
+            echo "Using the following IP scheme..." 
+            echo         
+            echo " Core01 VLAN $VLAN - $IP_CORE01"
+            echo " Core02 VLAN $VLAN - $IP_CORE02"
+            echo " HSRP VLAN $VLAN - $IP_HSRP"
+            echo 
+
+            read -e -r -p "Is this information correct ? (Y/n): " SEL
+
+            case $SEL in
+              [yY][eE][sS]|[yY]|"") break;;
+              [nN][oO]|[nN]) echo "lets try this again...." ;;
+            esac
+
+          fi # if valid IP
+
+        done # new IP loop
+
+        break;; # break the main loop
+
+    esac # main case
+
+  done # main while loop
+
+}
+
+#######################################################################################################################
+##### Main 
+
+################################################################### 
+## Core Nexus 7k Section
+
+print_header
+
+while :; do
+  echo
+  read -e -re -p "Generate VLAN / SVI Configuration for Core? (Y/n): " SEL
+  case $SEL in
+    [yY][eE][sS]|[yY]|"") 
+
+      gather_info
+      PRE_CONFIG=1
+
+      gather_ip_info
+      generate_core_config
+
+      while :; do
+          echo
+          read -e -r -p "Do you wish to view the generated configuration? (Y/n): " SEL
+          case $SEL in
+              [yY][eE][sS]|[yY]|"") 
+              echo "################################################################################"
+              echo "##"
+              echo "##    core01"
+              echo "##"
+              cat $CF_CORE01
+  
+              echo "################################################################################"
+              echo "##"
+              echo "##    core02"
+              echo "##"
+              cat $CF_CORE02
+              break ;;
+  
+              [nN][oO]|[nN]) break;;
+          esac
+      done
+
+    while :; do # apply loop
+
+      echo
+
+      read -e -r -p "Would you like me to apply these changes to the core switches? (y/N): " SEL
+  
+      case $SEL in
+
+        [yY][eE][sS]|[yY]) 
+          gather_user_info
+          USER_INFO=1
+				    
+          check_existing_config 10.$SITE.195.0 core
+          check_existing_config 10.$SITE.195.0 core
+    
+          generate_expect_script 10.$SITE.195.0 $CF_CORE01 $EX_CORE01
+          generate_expect_script 10.$SITE.195.1 $CF_CORE02 $EX_CORE02
+                                                  
+          while :; do
+            echo
+            read -e -r -p "Ready to execute... Are you sure? (yes/NO): " SEL
+            echo 
+            echo
+
+            case $SEL in
+              [yY][eE][sS]) 
+		echo
+		echo
+                echo "executing script on core01.... "
+                echo 
+                $EXPECT -f $EX_CORE01
+                sleep 1
+  
+		echo
+		echo
+                echo "executing script on core02.... "
+                echo 
+                $EXPECT -f $EX_CORE02
+                
+	        break;;
+
+              [nN][oO]|"") break;;
+
+            esac #Ready to execute
+  
+          done 
+  
+          break;;
+
+        [nN][oO]|[nN]|"") break;;
+
+      esac # apply these changes?
+
+    done # apply loop
+
+    break;;
+
+    [nN][oO]|[nN]) break;;
+
+  esac # generate core
+
+done
+
+echo 
+echo
+read -p  "section complete, press enter to continue."
+
+################################################################### 
+## Nexus 5k Section
+
+print_header
+
+while :; do
+
+  echo
+  read -e -r -p "Generate VLAN Configuration for 5k distribution? (Y/n): " SEL
+
+  case $SEL in
+
+    [yY][eE][sS]|[yY]|"") 
+
+      if [ $PRE_CONFIG -ne 1 ]; then 
+        gather_info
+        PRE_CONFIG=1
+      fi
+
+      while :; do
+
+        echo
+        read -e -r -p "Do you want to trunk this VLAN to UCS (PO201-202)? (Y/n): " SEL
+
+        case $SEL in
+          [yY][eE][sS]|[yY]|"") 
+            UCS_TRUNK=1;
+            break;;
+          *) 
+            UCS_TRUNK=0;
+            break;;
+        esac
+
+      done
+
+      generate_5k_config
+
+      while :; do
+
+        echo
+        read -e -r -p "Do you wish to view the generated configuration? (Y/n): " SEL
+        case $SEL in
+
+          [yY][eE][sS]|[yY]|"") 
+            echo "################################################################################"
+            echo "##"
+            echo "##    5k01"
+            echo "##"
+            cat $CF_5K
+            echo "################################################################################"
+            echo "##"
+            echo "##    5k01"
+            echo "##"
+            cat $CF_5K
+                        
+            break ;;
+  
+          [nN][oO]|[nN]) break;;
+  
+        esac
+      done
+
+      while :; do # apply loop
+        echo
+        read -e -r -p "Would you like me to apply these changes to the 5k switches? (y/N): " SEL
+        case $SEL in
+          [yY][eE][sS]|[yY]) 
+            if [ $USER_INFO -ne 1 ]; then 
+              gather_user_info
+              USER_INFO=1
+            fi
+  
+            check_existing_config 10.$SITE.194.10 5k
+            check_existing_config 10.$SITE.194.11 5k
+  
+            generate_expect_script 10.$SITE.194.10 $CF_5K $EX_5K01
+            generate_expect_script 10.$SITE.194.11 $CF_5K $EX_5K02
+                                                 
+            while :; do
+  
+              echo
+              read -e -r -p "Ready to execute... Are you sure? (yes/NO): " SEL
+              echo
+              echo
+  
+              case $SEL in
+  
+                [yY][eE][sS]) 
+
+		  echo
+		  echo
+                  echo "executing script on 5k01 "
+                  echo 
+                  EXPECT -f $EX_5K01
+		  sleep 1
+
+		  echo
+		  echo
+                  echo "executing script on 5k02 "
+                  echo 
+                  $EXPECT -f $EX_5K02
+                  break;;
+  
+                [nN][oO]|"") break;;
+              esac
+  
+            done
+            break;;
+  
+          [nN][oO]|[nN]|"") break;;
+        esac
+  
+      done # apply loop
+      break;;
+  
+    [nN][oO]|[nN]) break;; # generate 5k config
+  esac
+done
+  
+
+echo 
+echo
+read -p  "section complete, press enter to continue."
+
+
+################################################################### 
+## Nexus 1000v Section
+
+
+
+print_header
+
+while :; do
+  echo
+  read -e -r -p "Generate VLAN Configuration / Port Profile for the 1000v ? (Y/n): " SEL
+  case $SEL in
+    [yY][eE][sS]|[yY]|"") 
+      if [ $PRE_CONFIG -ne 1 ]; then 
+        gather_info
+        PRE_CONFIG=1
+      fi
+      generate_1000v_config
+
+      while :; do
+        echo
+        read -e -r -p "Do you wish to view the generated configuration? (Y/n): " SEL
+        case $SEL in
+          [yY][eE][sS]|[yY]|"") 
+            echo "################################################################################"
+            echo "##"
+            echo "##    1000v"
+            echo "##"
+            cat $CF_1000v
+                         
+            break ;;
+          [nN][oO]|[nN]) break;;
+        esac
+      done
+
+      while :; do # apply loop
+        echo
+        read -e -r -p "Would you like me to apply these changes to the 1000v? (y/N): " SEL
+        case $SEL in
+          [yY][eE][sS]|[yY]) 
+            if [ $USER_INFO -ne 1 ]; then 
+              gather_user_info
+              USER_INFO=1
+            fi
+            if [ $SITE -eq 254 ]; then
+              echo 
+              echo "This site has 2 possible 1000v switches...."
+              echo 
+              echo "  1. B230 Cluster - 10.254.196.16"
+              echo "  2. High Performance Cluster - 10.254.196.17"
+
+              # figure out a way to add an option for BOTH... 
+
+              while :; do
+                echo
+                read -e -r -p "Which do you want to configure? " SEL
+  
+                case $SEL in
+                  1)
+                    IP_1000v="10.$SITE.196.16"
+                    break;;
+                  2)
+                    IP_1000v="10.$SITE.196.17"
+                    break;;
+                esac 
+              done
+            else
+              IP_1000v="10.$SITE.196.16"
+            fi
+
+            dprint "1000v IP set to $IP_1000v"
+
+            check_existing_config $IP_1000v 1000v
+
+            generate_expect_script $IP_1000v $CF_1000v $EX_1000v
+                                               
+            while :; do
+              echo
+                read -e -r -p "Ready to execute... Are you sure? (yes/NO): " SEL
+                echo 
+              echo
+
+              case $SEL in
+
+                [yY][eE][sS]) 
+		  echo 
+		  echo 
+                  echo "executing script on 1000v "
+                  echo 
+                  $EXPECT -f $EX_1000v
+                  sleep 1
+                  break;;
+
+                [nN][oO]|"") break;;
+              esac
+            done
+            break;;
+
+          [nN][oO]|[nN]|"") break;;
+        esac
+
+      done # apply loop
+      break;;
+
+    [nN][oO]|[nN]) break;;
+
+  esac
+done
+
+echo 
+echo
+read -p  "section complete, press enter to continue."
+
+
+################################################################### 
+## le End (aka cleanup)
+
+print_header
+echo
+echo "All sections complete."
+echo
+echo
+
+if [ $DELETE_ON_EXIT -eq 1 ]; then 
+  dprint "deleting data files"
+  rm $TMPDIR/*.config 2>/dev/null
+  rm $TMPDIR/*.expect 2>/dev/null
+fi
+
+exit 0
