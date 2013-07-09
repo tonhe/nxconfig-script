@@ -6,6 +6,9 @@ VERSION=0.4.3
 # Copyright 2013 Tony Mattke. All rights reserved.
 # http://routerjockey.com tony@mattke.net http://twitter.com/tonhe
 #
+# Git Repo
+# https://github.com/tonhe/nxconfig-script.git
+#
 # After playing with variables, search this script for CHANGE_ME and adjust 
 #  the script to fit your needs.
 #
