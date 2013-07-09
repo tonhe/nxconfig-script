@@ -1,15 +1,20 @@
 #!/bin/bash
-VERSION=0.4.1
+VERSION=0.4.3
 #
 # nxconfig 
 # Created by Tony Mattke on 6/30/13
 # Copyright 2013 Tony Mattke. All rights reserved.
 # http://routerjockey.com tony@mattke.net http://twitter.com/tonhe
 #
+# After playing with variables, search this script for CHANGE_ME and adjust 
+#  the script to fit your needs.
+#
 ######## variables
 DEBUG=0   # Displays Debug Information
-VERIFY_INFO=0 # Requires most inputs to be verified
+VERIFY_INFO=1 # Requires most inputs to be verified
 DELETE_ON_EXIT=1  # Deletes data files created (more secure)
+ALLOW_DEVICE_CONFIG=0 # Allows this script to make changes to devices
+
 TMPDIR=~/.nxconfig
 CF_CORE01=$TMPDIR/core01.config
 CF_CORE02=$TMPDIR/core02.config
@@ -20,6 +25,7 @@ EX_CORE02=$TMPDIR/core02.expect
 EX_5K01=$TMPDIR/5k01.expect
 EX_5K02=$TMPDIR/5k02.expect
 EX_1000v=$TMPDIR/1000v.expect
+
 PRE_CONFIG=0
 USER_INFO=0
 EXPECT=/usr/bin/expect
@@ -337,6 +343,7 @@ EOF
 function generate_1000v_config {
   dprint "-> entering generate_1000v_config"
 
+# CHANGE_ME 1000v TEMPLATE
 cat > $CF_1000v << EOF
 !
 vlan $VLAN
@@ -363,6 +370,7 @@ EOF
 function generate_5k_config {
   dprint "-> entering generate_5k_config"
 
+# CHANGE_ME 5k TEMPLATE
 cat > $CF_5K << EOF
 !
 vlan $VLAN
@@ -390,6 +398,7 @@ function generate_core_config {
 
   for (( i=1; i<=2; i++ )) do 
 
+# CHANGE_ME 7k TEMPLATE
 cat > $TMP << EOF
 !
 vlan $VLAN
@@ -500,9 +509,13 @@ function gather_user_info {
 function gather_info {
 
   print_header
+
+  # CHANGE_ME
+  # Site codes are used as the second octed.. 
+  # i.e. Site A ==  10.10.0.0/16
   echo "##   Site Codes"
-  echo "##     TD = 254"
-  echo "##     HS = 248"
+  echo "##     A = 10"
+  echo "##     B = 20"
   echo "##"
 
   while :; do
@@ -510,8 +523,9 @@ function gather_info {
       echo
       read -e -r -p "What site are we making changes at?: " SITE
       case $SITE in
-        254) break;;
-        248) break;;
+  	# CHANGE_ME -- add your site codes here...
+        10) break;;
+        20) break;;
       esac
     done
 
@@ -723,9 +737,13 @@ while :; do
           gather_user_info
           USER_INFO=1
 				    
+	  # CHANGE_ME
+	  # These should match your CORE01 and CORE02 IPs
           check_existing_config 10.$SITE.195.0 core
-          check_existing_config 10.$SITE.195.0 core
+          check_existing_config 10.$SITE.195.1 core
     
+	  # CHANGE_ME
+	  # These should match your CORE01 and CORE02 IPs
           generate_expect_script 10.$SITE.195.0 $CF_CORE01 $EX_CORE01
           generate_expect_script 10.$SITE.195.1 $CF_CORE02 $EX_CORE02
                                                   
@@ -741,14 +759,14 @@ while :; do
 		echo
                 echo "executing script on core01.... "
                 echo 
-                $EXPECT -f $EX_CORE01
+		[[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_CORE01
                 sleep 1
   
 		echo
 		echo
                 echo "executing script on core02.... "
                 echo 
-                $EXPECT -f $EX_CORE02
+		[[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_CORE02
                 
 	        break;;
 
@@ -850,9 +868,13 @@ while :; do
               USER_INFO=1
             fi
   
-            check_existing_config 10.$SITE.194.10 5k
-            check_existing_config 10.$SITE.194.11 5k
-  
+	    # CHANGE_ME
+	    # These should match your 5k01 and 5k02 IPs
+            check_existing_config 10.$SITE.10.10 5k
+            check_existing_config 10.$SITE.10.11 5k
+
+	    # CHANGE_ME
+	    # These should match your 5k01 and 5k02 IPs
             generate_expect_script 10.$SITE.194.10 $CF_5K $EX_5K01
             generate_expect_script 10.$SITE.194.11 $CF_5K $EX_5K02
                                                  
@@ -871,14 +893,14 @@ while :; do
 		  echo
                   echo "executing script on 5k01 "
                   echo 
-                  EXPECT -f $EX_5K01
+		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_5K01
 		  sleep 1
 
 		  echo
 		  echo
                   echo "executing script on 5k02 "
                   echo 
-                  $EXPECT -f $EX_5K02
+		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_5K02
                   break;;
   
                 [nN][oO]|"") break;;
@@ -946,14 +968,17 @@ while :; do
               gather_user_info
               USER_INFO=1
             fi
-            if [ $SITE -eq 254 ]; then
+
+	    # CHANGE_ME -- Do you have a site with more than 1x 1000v?
+            if [ $SITE -eq 20 ]; then
               echo 
               echo "This site has 2 possible 1000v switches...."
               echo 
-              echo "  1. B230 Cluster - 10.254.196.16"
-              echo "  2. High Performance Cluster - 10.254.196.17"
+	      # CHANGE_ME
+              echo "  1. Cluster A - 10.20.1.16"
+              echo "  2. Cluster B - 10.20.1.17"
 
-              # figure out a way to add an option for BOTH... 
+              # TODO - add an option for BOTH... 
 
               while :; do
                 echo
@@ -961,15 +986,18 @@ while :; do
   
                 case $SEL in
                   1)
-                    IP_1000v="10.$SITE.196.16"
+	            #CHANGE_ME 1000v-1 IP for SITE20
+                    IP_1000v="10.$SITE.1.16"
                     break;;
                   2)
-                    IP_1000v="10.$SITE.196.17"
+	            #CHANGE_ME 1000v-2 IP for SITE20
+                    IP_1000v="10.$SITE.1.17"
                     break;;
                 esac 
               done
             else
-              IP_1000v="10.$SITE.196.16"
+	      #CHANGE_ME 1000v IP for SITE10
+              IP_1000v="10.$SITE.1.16"
             fi
 
             dprint "1000v IP set to $IP_1000v"
@@ -991,7 +1019,7 @@ while :; do
 		  echo 
                   echo "executing script on 1000v "
                   echo 
-                  $EXPECT -f $EX_1000v
+		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_1000v
                   sleep 1
                   break;;
 
