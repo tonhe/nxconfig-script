@@ -336,6 +336,7 @@ send "copy run start\n"
 expect {
   "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
   "*Copy complete" {}
+  "*# $" {}
 }
 EOF
 
