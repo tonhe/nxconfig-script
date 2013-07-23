@@ -973,7 +973,7 @@ while :; do
             fi
 
 	    # CHANGE_ME -- Do you have a site with more than 1x 1000v?
-            if [ $SITE -eq 20 ]; then
+            if [ $SITE -eq 254 ]; then
               echo 
               echo "This site has 2 possible 1000v switches...."
               echo 
