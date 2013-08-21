@@ -1010,7 +1010,7 @@ while :; do
       fi
 
       # CHANGE_ME -- how many vNIC templates?
-      if [ $SITE -eq 254 ]; then
+      if [ $SITE -eq 20 ]; then
         echo 
         echo "This site has 2 possible ESX Clusters switches...."
         echo 
@@ -1076,11 +1076,11 @@ while :; do
 
             # CHANGE_ME
             # These should match your UCS Fabric A and B management IPs
-            check_existing_config 10.$SITE.196.13 FI
+            check_existing_config 10.$SITE.1.13 FI
 
             # CHANGE_ME
             # These should match your UCS Fabric A and B management IPs
-            generate_expect_script 10.$SITE.196.13 $CF_FI $EX_FI
+            generate_expect_script 10.$SITE.1.13 $CF_FI $EX_FI
 
 	    USERNAME = $USER
 
