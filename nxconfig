@@ -13,20 +13,22 @@ VERSION=0.4.3
 #  the script to fit your needs.
 #
 ######## variables
-DEBUG=0   # Displays Debug Information
-VERIFY_INFO=1 # Requires most inputs to be verified
-DELETE_ON_EXIT=1  # Deletes data files created (more secure)
+DEBUG=1   # Displays Debug Information
+VERIFY_INFO=0 # Requires most inputs to be verified
+DELETE_ON_EXIT=0  # Deletes data files created (more secure)
 ALLOW_DEVICE_CONFIG=0 # Allows this script to make changes to devices
 
 TMPDIR=~/.nxconfig
 CF_CORE01=$TMPDIR/core01.config
 CF_CORE02=$TMPDIR/core02.config
 CF_5K=$TMPDIR/5k.config
+CF_FI=$TMPDIR/FI.config
 CF_1000v=$TMPDIR/1000v.config
 EX_CORE01=$TMPDIR/core01.expect
 EX_CORE02=$TMPDIR/core02.expect
 EX_5K01=$TMPDIR/5k01.expect
 EX_5K02=$TMPDIR/5k02.expect
+EX_FI=$TMPDIR/FI.expect
 EX_1000v=$TMPDIR/1000v.expect
 
 PRE_CONFIG=0
@@ -113,7 +115,7 @@ proc do_exit {msg {code 1}} {
   }
 
   # disable paging
-  send -- "terminal length 0\r"
+  send -- "term len 0\n"
   expect "#"
 EOF
 
@@ -139,6 +141,15 @@ send "sh vlan id $VLAN\n"
   expect {
     "*VLAN $VLAN not found" {}
     "*VLAN Name" { do_exit "ERROR: VLAN Exists on $IP !!!\n"; }
+  }
+EOF
+   ;;
+   FI)
+cat >> $FILE << EOF
+send "sh vlan | i $VLAN\n"
+  expect {
+    "*$VLAN" { do_exit "ERROR: VLAN Exists on $IP !!!\n"; }
+    "*#" {}
   }
 EOF
    ;;
@@ -294,11 +305,15 @@ proc do_exit {msg {code 1}} {
   }
 
   # disable paging
-  send -- "terminal pager 0\n"
+  send -- "term len 0\n"
   expect "#"
 
   send -- "configure terminal\n"
-  expect "(config)#"
+  expect {
+    "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
+    "(config)#" {}
+}
+
 EOF
 
   oIFS=$IFS
@@ -394,6 +409,47 @@ EOF
 }
 
 
+function generate_fi_config {
+  dprint "-> entering generate_fi_config"
+
+# CHANGE_ME FI TEMPLATE
+cat > $CF_FI << EOF
+scope eth-uplink
+create vlan VLAN$VLAN $VLAN
+commit-buffer
+scope org
+EOF
+
+  if [ $UCS_ESX1 -eq 1 ]; then
+cat >> $CF_FI << EOF
+scope vnic-templ ESX-vNIC-FabricA
+create eth-if VLAN$VLAN
+commit-buffer
+scope vnic-templ ESX-vNIC-FabricB
+create eth-if VLAN$VLAN
+commit-buffer
+EOF
+  fi
+
+  if [ $UCS_ESX2 -eq 1 ]; then
+cat >> $CF_FI << EOF
+scope vnic-temp ESX2-vNIC-A
+create eth-if VLAN$VLAN
+commit-buffer
+scope vnic-temp ESX2-vNIC-B
+create eth-if VLAN$VLAN
+commit-buffer
+EOF
+  fi
+
+cat >> $CF_FI << EOF
+exit
+EOF
+
+  dprint "<- exiting generate_fi_config"
+}
+
+
 
 function generate_core_config {
   TMP=$TMPDIR/temp-core.config
@@ -483,14 +539,14 @@ function read_correct {
 function gather_user_info {
   while :; do
     echo
-    read -e -r -p "Username: " USERNAME
+    read -e -r -p "Username: " USER
 
-    if read_correct $USERNAME; then 
+    if read_correct $USER; then 
       break;
     fi
   done
 
-  dprint "Username ($USERNAME)"
+  dprint "Username ($USER)"
 
   while :; do
     echo
@@ -507,6 +563,9 @@ function gather_user_info {
     fi
 
   done
+
+  USERNAME = $USER
+
 }
 
 
@@ -923,6 +982,141 @@ while :; do
   esac
 done
   
+
+echo 
+echo
+read -p  "section complete, press enter to continue."
+
+################################################################### 
+## Cisco UCS Fabric Interconnect Section
+
+print_header
+
+UCS_ESX1=0 
+UCS_ESX2=0 
+
+while :; do
+
+  echo
+  read -e -r -p "Generate VLAN Configuration for UCS Fabric Interconnects? (Y/n): " SEL
+
+  case $SEL in
+
+    [yY][eE][sS]|[yY]|"")
+
+      if [ $PRE_CONFIG -ne 1 ]; then
+        gather_info
+        PRE_CONFIG=1
+      fi
+
+      # CHANGE_ME -- how many vNIC templates?
+      if [ $SITE -eq 254 ]; then
+        echo 
+        echo "This site has 2 possible ESX Clusters switches...."
+        echo 
+        # CHANGE_ME
+        echo "  1. UCS Cluster 01 - B230 M1 Servers"
+        echo "  2. UCS Cluster 02 - HP B230 M2 Servers"
+        echo "  3. Both"
+
+        while :; do
+          echo
+          read -e -r -p "Which do you want to configure? " SEL
+
+          case $SEL in
+            1)
+              UCS_ESX1=1 
+              break;;
+            2)
+              UCS_ESX2=1 
+              break;;
+            3)
+              UCS_ESX1=1 
+              UCS_ESX2=1 
+              break;;
+          esac
+        done
+        else
+          UCS_ESX1=1 
+        fi
+
+      generate_fi_config
+
+      while :; do
+
+        echo
+        read -e -r -p "Do you wish to view the generated configuration? (Y/n): " SEL
+        case $SEL in
+
+          [yY][eE][sS]|[yY]|"")
+            echo "################################################################################"
+            echo "##"
+            echo "##    UCS Fabric Interconnects"
+            echo "##"
+            cat $CF_FI
+
+            break ;;
+
+          [nN][oO]|[nN]) break;;
+
+        esac
+      done
+
+      while :; do # apply loop
+        echo
+        read -e -r -p "Would you like me to apply these changes to the UCS Fabric Interconnects? (y/N): " SEL
+        case $SEL in
+          [yY][eE][sS]|[yY])
+            if [ $USER_INFO -ne 1 ]; then
+              gather_user_info
+              USER_INFO=1
+            fi
+
+            USERNAME = "ucs-TACACS/$USER"
+
+            # CHANGE_ME
+            # These should match your UCS Fabric A and B management IPs
+            check_existing_config 10.$SITE.196.13 FI
+
+            # CHANGE_ME
+            # These should match your UCS Fabric A and B management IPs
+            generate_expect_script 10.$SITE.196.13 $CF_FI $EX_FI
+
+	    USERNAME = $USER
+
+            while :; do
+
+              echo
+              read -e -r -p "Ready to execute... Are you sure? (yes/NO): " SEL
+              echo
+              echo
+
+              case $SEL in
+
+                [yY][eE][sS])
+
+                  echo
+                  echo
+                  echo "executing script on UCS Fabric"
+                  echo 
+                  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_FI
+                  break;;
+
+                [nN][oO]|"") break;;
+              esac
+
+            done
+            break;;
+
+          [nN][oO]|[nN]|"") break;;
+        esac
+
+      done # apply loop
+      break;;
+
+    [nN][oO]|[nN]) break;; # generate Fabric config
+  esac
+done
 
 echo 
 echo
