@@ -77,6 +77,36 @@ function dprint {
    fi
 }
 
+function run_config_script  {
+ $SCRIPT=${1}
+
+ [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $SCRIPT
+
+ EC=$? ## store the exit code.
+
+ # Read the exit code of EXPECT, if it isn't 0 there was an issue... 
+ if [ $EC -ne 0 ] ; then
+   echo 
+   echo 
+   echo 
+   echo "***NOTICE***"
+   echo
+   echo
+   echo "Houston, we have a problem."
+   echo
+   echo "Something went wrong while executing our expect script. Some configuration changes"
+   echo "may of been made. Check the output above for more information."
+   echo
+   echo 
+   echo "GAME OVER"
+   echo
+   echo
+   echo
+   exit 1
+  fi
+}
+
+
 function check_existing_config {
   dprint "-> entering check_existing_config"
   IP=${1}
@@ -874,15 +904,13 @@ while :; do
 		echo
                 echo "executing script on core01.... "
                 echo 
-		[[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_CORE01
-                sleep 1
+		run_config_script $EX_CORE01
   
 		echo
 		echo
                 echo "executing script on core02.... "
                 echo 
-		[[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_CORE02
-                
+		run_config_script $EX_CORE02
 	        break;;
 
               [nN][oO]|"") break;;
@@ -1008,14 +1036,14 @@ while :; do
 		  echo
                   echo "executing script on 5k01 "
                   echo 
-		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_5K01
+		  run_config_script $EX_5K01
 		  sleep 1
 
 		  echo
 		  echo
                   echo "executing script on 5k02 "
                   echo 
-		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_5K02
+		  run_config_script $EX_5K02
                   break;;
   
                 [nN][oO]|"") break;;
@@ -1155,7 +1183,7 @@ while :; do  # main
                   echo
                   echo "executing script on UCS Fabric"
                   echo 
-                  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_FI
+                  run_config_script $EX_FI
                   break;;
 
                 [nN][oO]|"") break;;
@@ -1182,8 +1210,6 @@ read -p  "section complete, press enter to continue."
 
 ################################################################### 
 ## Nexus 1000v Section
-
-
 
 print_header
 
@@ -1276,7 +1302,7 @@ while :; do
 		  echo 
                   echo "executing script on 1000v "
                   echo 
-		  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $EX_1000v
+		  run_config_script $EX_1000v
                   sleep 1
                   break;;
 
