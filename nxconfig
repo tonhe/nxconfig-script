@@ -13,11 +13,42 @@ VERSION=0.4.3
 #  the script to fit your needs.
 #
 ######## variables
-DEBUG=0   # Displays Debug Information
-VERIFY_INFO=1 # Requires most inputs to be verified
+DEBUG=1   # Displays Debug Information
+VERIFY_INFO=0 # Requires most inputs to be verified
 DELETE_ON_EXIT=1  # Deletes data files created (more secure)
-ALLOW_DEVICE_CONFIG=1 # Allows this script to make changes to devices
+ALLOW_DEVICE_CONFIG=0 # Allows this script to make changes to devices
 
+# IP Addressing
+#
+# this script works based on  some assumptions.. 
+#
+#    1. You use 10/8 for your internal IP addressing
+#    2. You use 10.$SITE/16 for your IP schema
+#    2. You use the same management IPs between sites.
+#    4. You understand 1-3
+#
+VALID_SITES="254 248"
+MGMT_IP_CORE01="195.0"  # Last two octets
+MGMT_IP_CORE02="195.1" 
+MGMT_IP_5K01="194.10"
+MGMT_IP_5K02="194.11" 
+MGMT_IP_FI="196.13"
+MGMT_IP_1000V01="196.16"
+
+# UCS FI vNIC Templates
+vNIC_CLUSTER01A="ESX-vNIC-FabricA"
+vNIC_CLUSTER01B="ESX-vNIC-FabricB"
+
+# Multiple Clusters -- I also assume multiple 1000v's here... 
+SITES_WITH_TWO="254"
+MGMT_IP_1000V02="196.17"
+vNIC_CLUSTER02A="ESX2-vNIC-A"
+vNIC_CLUSTER02B="ESX2-vNIC-B"
+DESC_CLUSTER01="UCS B230 M1 Cluster 01"
+DESC_CLUSTER02="UCS B230 M2 HP Cluster 02"
+
+
+# working directory
 TMPDIR=~/.nxconfig
 CF_CORE01=$TMPDIR/core01.config
 CF_CORE02=$TMPDIR/core02.config
@@ -31,8 +62,6 @@ EX_5K02=$TMPDIR/5k02.expect
 EX_FI=$TMPDIR/FI.expect
 EX_1000v=$TMPDIR/1000v.expect
 
-PRE_CONFIG=0
-USER_INFO=0
 EXPECT=/usr/bin/expect
 
 ######## init
@@ -437,14 +466,14 @@ exit
 scope org
 EOF
 
-  if [ $UCS_ESX1 -eq 1 ]; then
+  if [ $CONFIG_UCS_ESX1 -eq 1 ]; then
 cat >> $CF_FI << EOF
-scope vnic-templ ESX-vNIC-FabricA
+scope vnic-templ $vNIC_CLUSTER01A
 create eth-if VLAN$VLAN
 commit-buffer
 exit
 exit
-scope vnic-templ ESX-vNIC-FabricB
+scope vnic-templ $vNIC_CLUSTER01B
 create eth-if VLAN$VLAN
 commit-buffer
 exit
@@ -452,14 +481,14 @@ exit
 EOF
   fi
 
-  if [ $UCS_ESX2 -eq 1 ]; then
+  if [ $CONFIG_UCS_ESX2 -eq 1 ]; then
 cat >> $CF_FI << EOF
-scope vnic-temp ESX2-vNIC-A
+scope vnic-temp $vNIC_CLUSTER02A
 create eth-if VLAN$VLAN
 commit-buffer
 exit
 exit
-scope vnic-temp ESX2-vNIC-B
+scope vnic-temp $vNIC_CLUSTER02B
 create eth-if VLAN$VLAN
 commit-buffer
 exit
@@ -597,20 +626,20 @@ function gather_info {
   # CHANGE_ME
   # Site codes are used as the second octed.. 
   # i.e. Site A ==  10.10.0.0/16
-  echo "##   Site Codes"
-  echo "##     TD = 254"
-  echo "##     HS = 248"
+  echo "##   Valid Sites"
+  echo "##      $VALID_SITES" 
   echo "##"
+
 
   while :; do
     while :; do
       echo
       read -e -r -p "What site are we making changes at?: " SITE
-      case $SITE in
-  	# CHANGE_ME -- add your site codes here...
-        254) break;;
-        248) break;;
-      esac
+      for NUM in `echo $VALID_SITES`; do
+        if [[ $SITE == $NUM ]]; then
+          break 2;
+        fi
+      done
     done
 
   if read_correct $SITE; then 
@@ -767,11 +796,13 @@ function gather_ip_info {
 
 }
 
+######## Main 
 #######################################################################################################################
-##### Main 
-
-################################################################### 
+#######################################################################################################################
 ## Core Nexus 7k Section
+
+PRE_CONFIG=0
+USER_INFO=0
 
 print_header
 
@@ -820,16 +851,16 @@ while :; do
         [yY][eE][sS]|[yY]) 
           gather_user_info
           USER_INFO=1
+
+
+	  dprint "core01 10.$SITE.$MGMT_IP_CORE01"
+	  dprint "core02 10.$SITE.$MGMT_IP_CORE02"
 				    
-	  # CHANGE_ME
-	  # These should match your CORE01 and CORE02 IPs
-          check_existing_config 10.$SITE.195.0 core
-          check_existing_config 10.$SITE.195.1 core
+          check_existing_config 10.$SITE.$MGMT_IP_CORE01 core
+          check_existing_config 10.$SITE.$MGMT_IP_CORE02 core
     
-	  # CHANGE_ME
-	  # These should match your CORE01 and CORE02 IPs
-          generate_expect_script 10.$SITE.195.0 $CF_CORE01 $EX_CORE01
-          generate_expect_script 10.$SITE.195.1 $CF_CORE02 $EX_CORE02
+          generate_expect_script 10.$SITE.$MGMT_IP_CORE01 $CF_CORE01 $EX_CORE01
+          generate_expect_script 10.$SITE.$MGMT_IP_CORE02 $CF_CORE02 $EX_CORE02
                                                   
           while :; do
             echo
@@ -954,13 +985,13 @@ while :; do
   
 	    # CHANGE_ME
 	    # These should match your 5k01 and 5k02 IPs
-            check_existing_config 10.$SITE.194.10 5k
-            check_existing_config 10.$SITE.194.11 5k
+            check_existing_config 10.$SITE.$MGMT_IP_5K01 5k
+            check_existing_config 10.$SITE.$MGMT_IP_5K02 5k
 
 	    # CHANGE_ME
 	    # These should match your 5k01 and 5k02 IPs
-            generate_expect_script 10.$SITE.194.10 $CF_5K $EX_5K01
-            generate_expect_script 10.$SITE.194.11 $CF_5K $EX_5K02
+            generate_expect_script 10.$SITE.$MGMT_IP_5K01 $CF_5K $EX_5K01
+            generate_expect_script 10.$SITE.$MGMT_IP_5K02 $CF_5K $EX_5K02
                                                  
             while :; do
   
@@ -1013,10 +1044,10 @@ read -p  "section complete, press enter to continue."
 
 print_header
 
-UCS_ESX1=0 
-UCS_ESX2=0 
+CONFIG_UCS_ESX1=0 
+CONFIG_UCS_ESX2=0 
 
-while :; do
+while :; do  # main
 
   echo
   read -e -r -p "Generate VLAN Configuration for UCS Fabric Interconnects? (Y/n): " SEL
@@ -1030,40 +1061,42 @@ while :; do
         PRE_CONFIG=1
       fi
 
-      # CHANGE_ME -- how many vNIC templates?
-      if [ $SITE -eq 254 ]; then
-        echo 
-        echo "This site has 2 possible ESX Clusters switches...."
-        echo 
-        # CHANGE_ME
-        echo "  1. UCS Cluster 01 - B230 M1 Servers"
-        echo "  2. UCS Cluster 02 - HP B230 M2 Servers"
-        echo "  3. Both"
+      # CHANGE_ME 
+      for NUM in `echo $SITES_WITH_TWO`; do
+        if [[ $SITE == $NUM ]]; then
 
-        while :; do
-          echo
-          read -e -r -p "Which do you want to configure? " SEL
-
-          case $SEL in
-            1)
-              UCS_ESX1=1 
-              break;;
-            2)
-              UCS_ESX2=1 
-              break;;
-            3)
-              UCS_ESX1=1 
-              UCS_ESX2=1 
-              break;;
-          esac
-        done
+          echo 
+          echo "This site has 2 possible ESX Clusters switches...."
+          echo 
+          echo "  1. $DESC_CLUSTER01"
+          echo "  2. $DESC_CLUSTER02"
+          echo "  3. Both"
+  
+          while :; do # while which
+            echo
+            read -e -r -p "Which do you want to configure? " SEL
+  
+            case $SEL in
+              1)
+                CONFIG_UCS_ESX1=1 
+                break 2;;
+              2)
+                CONFIG_UCS_ESX2=1 
+                break 2;;
+              3)
+                CONFIG_UCS_ESX1=1 
+                CONFIG_UCS_ESX2=1 
+                break 2;;
+            esac
+          done # while which
         else
-          UCS_ESX1=1 
+            CONFIG_UCS_ESX1=1 
         fi
+      done
 
       generate_fi_config
 
-      while :; do
+      while :; do # while view config
 
         echo
         read -e -r -p "Do you wish to view the generated configuration? (Y/n): " SEL
@@ -1081,9 +1114,9 @@ while :; do
           [nN][oO]|[nN]) break;;
 
         esac
-      done
+      done # while view config
 
-      while :; do # apply loop
+      while :; do # while apply 
         echo
         read -e -r -p "Would you like me to apply these changes to the UCS Fabric Interconnects? (y/N): " SEL
         case $SEL in
@@ -1098,16 +1131,16 @@ while :; do
 
             # CHANGE_ME
             # These should match your UCS Fabric A and B management IPs
-            check_existing_config 10.$SITE.196.13 FI
+            check_existing_config 10.$SITE.$MGMT_IP_FI FI
 
             # CHANGE_ME
             # These should match your UCS Fabric A and B management IPs
-            generate_expect_script 10.$SITE.196.13 $CF_FI $EX_FI
+            generate_expect_script 10.$SITE.$MGMT_IP_FI $CF_FI $EX_FI
 
             # Revert to previous username.. 
 	    USERNAME=$USER
 
-            while :; do
+            while :; do # while execute
 
               echo
               read -e -r -p "Ready to execute... Are you sure? (yes/NO): " SEL
@@ -1128,7 +1161,7 @@ while :; do
                 [nN][oO]|"") break;;
               esac
 
-            done
+            done # while execute
             break;;
 
           [nN][oO]|[nN]|"") break;;
@@ -1139,7 +1172,8 @@ while :; do
 
     [nN][oO]|[nN]) break;; # generate Fabric config
   esac
-done
+
+done # main
 
 echo 
 echo
@@ -1190,36 +1224,38 @@ while :; do
               USER_INFO=1
             fi
 
-	    # CHANGE_ME -- Do you have a site with more than 1x 1000v?
-            if [ $SITE -eq 254 ]; then
-              echo 
-              echo "This site has 2 possible 1000v switches...."
-              echo 
-	      # CHANGE_ME
-              echo "  1. UCS Cluster 01 - B230 M1 Servers (10.254.196.16)"
-              echo "  2. UCS Cluster 02 - HP B230 M2 Servers (10.254.196.17)"
+            for NUM in `echo $SITES_WITH_TWO`; do
+              if [[ $SITE == $NUM ]]; then
+
+                echo 
+                echo "This site has 2 possible 1000v switches...."
+                echo 
+                echo "  1. $DESC_CLUSTER01"
+                echo "  2. $DESC_CLUSTER02"
+		echo
 
               # TODO - add an option for BOTH... 
 
-              while :; do
-                echo
-                read -e -r -p "Which do you want to configure? " SEL
+                while :; do
+                  echo
+                  read -e -r -p "Which do you want to configure? " SEL
   
-                case $SEL in
-                  1)
-	            #CHANGE_ME 1000v-A IP for SITE20
-                    IP_1000v="10.$SITE.196.16"
-                    break;;
-                  2)
-	            #CHANGE_ME 1000v-B IP for SITE20
-                    IP_1000v="10.$SITE.196.17"
-                    break;;
-                esac 
-              done
-            else
-	      #CHANGE_ME 1000v IP for SITE10
-              IP_1000v="10.$SITE.196.16"
-            fi
+                  case $SEL in
+                    1)
+	              #CHANGE_ME 1000v-A IP for SITE20
+                      IP_1000v="10.$SITE.$MGMT_IP_1000V01"
+                      break;;
+                    2)
+	              #CHANGE_ME 1000v-B IP for SITE20
+                      IP_1000v="10.$SITE.$MGMT_IP_1000V02"
+                      break;;
+                  esac 
+                done
+              else
+	        #CHANGE_ME 1000v IP for SITE10
+                IP_1000v="10.$SITE.$MGMT_IP_1000V01"
+              fi
+            done
 
             dprint "1000v IP set to $IP_1000v"
 
