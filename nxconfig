@@ -10,7 +10,7 @@ VERSION=0.4.3
 # https://github.com/tonhe/nxconfig-script.git
 #
 # After playing with variables, search this script for CHANGE_ME and adjust 
-#  the script to fit your needs.
+# the script to fit your needs.
 #
 ######## variables
 DEBUG=1   # Displays Debug Information
@@ -653,9 +653,6 @@ function gather_info {
 
   print_header
 
-  # CHANGE_ME
-  # Site codes are used as the second octed.. 
-  # i.e. Site A ==  10.10.0.0/16
   echo "##   Valid Sites"
   echo "##      $VALID_SITES" 
   echo "##"
@@ -1011,13 +1008,9 @@ while :; do
               USER_INFO=1
             fi
   
-	    # CHANGE_ME
-	    # These should match your 5k01 and 5k02 IPs
             check_existing_config 10.$SITE.$MGMT_IP_5K01 5k
             check_existing_config 10.$SITE.$MGMT_IP_5K02 5k
 
-	    # CHANGE_ME
-	    # These should match your 5k01 and 5k02 IPs
             generate_expect_script 10.$SITE.$MGMT_IP_5K01 $CF_5K $EX_5K01
             generate_expect_script 10.$SITE.$MGMT_IP_5K02 $CF_5K $EX_5K02
                                                  
@@ -1089,7 +1082,6 @@ while :; do  # main
         PRE_CONFIG=1
       fi
 
-      # CHANGE_ME 
       for NUM in `echo $SITES_WITH_TWO`; do
         if [[ $SITE == $NUM ]]; then
 
@@ -1157,12 +1149,8 @@ while :; do  # main
             # Change USERNAME for FI login...
             USERNAME="ucs-TACACS\\\\$USER"
 
-            # CHANGE_ME
-            # These should match your UCS Fabric A and B management IPs
             check_existing_config 10.$SITE.$MGMT_IP_FI FI
 
-            # CHANGE_ME
-            # These should match your UCS Fabric A and B management IPs
             generate_expect_script 10.$SITE.$MGMT_IP_FI $CF_FI $EX_FI
 
             # Revert to previous username.. 
@@ -1268,17 +1256,14 @@ while :; do
   
                   case $SEL in
                     1)
-	              #CHANGE_ME 1000v-A IP for SITE20
                       IP_1000v="10.$SITE.$MGMT_IP_1000V01"
                       break;;
                     2)
-	              #CHANGE_ME 1000v-B IP for SITE20
                       IP_1000v="10.$SITE.$MGMT_IP_1000V02"
                       break;;
                   esac 
                 done
               else
-	        #CHANGE_ME 1000v IP for SITE10
                 IP_1000v="10.$SITE.$MGMT_IP_1000V01"
               fi
             done
