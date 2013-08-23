@@ -13,10 +13,14 @@ VERSION=0.4.3
 # the script to fit your needs.
 #
 ######## variables
-DEBUG=1   # Displays Debug Information
+DEBUG=0   # Displays Debug Information
 VERIFY_INFO=0 # Requires most inputs to be verified
 DELETE_ON_EXIT=1  # Deletes data files created (more secure)
-ALLOW_DEVICE_CONFIG=0 # Allows this script to make changes to devices
+ALLOW_DEVICE_CONFIG=1 # Allows this script to make changes to devices
+
+# This script requires Bash, Expect, and ipcalc
+EXPECT=/usr/bin/expect
+IPCALC=/usr/bin/ipcalc
 
 # IP Addressing
 #
@@ -40,7 +44,7 @@ vNIC_CLUSTER01A="ESX-vNIC-FabricA"
 vNIC_CLUSTER01B="ESX-vNIC-FabricB"
 
 # Multiple Clusters -- I also assume multiple 1000v's here... 
-SITES_WITH_TWO="254"
+MULTI_CLUSTER_SITES="254"
 MGMT_IP_1000V02="196.17"
 vNIC_CLUSTER02A="ESX2-vNIC-A"
 vNIC_CLUSTER02B="ESX2-vNIC-B"
@@ -62,7 +66,6 @@ EX_5K02=$TMPDIR/5k02.expect
 EX_FI=$TMPDIR/FI.expect
 EX_1000v=$TMPDIR/1000v.expect
 
-EXPECT=/usr/bin/expect
 
 ######## init
 mkdir $TMPDIR 2>/dev/null
@@ -78,7 +81,7 @@ function dprint {
 }
 
 function run_config_script  {
- $SCRIPT=${1}
+ local SCRIPT=${1}
 
  [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $SCRIPT
 
@@ -425,6 +428,7 @@ send "copy run start\n"
 expect {
   "*Invalid" { do_exit "\nCommand Execution Failed ($LN)\n"; }
   "*Copy complete" {}
+  "*100%" {}
   "*# $" {}
 }
 EOF
@@ -435,9 +439,7 @@ EOF
 
 
 function generate_1000v_config {
-  dprint "-> entering generate_1000v_config"
-
-# CHANGE_ME 1000v TEMPLATE
+					# CHANGE_ME 1000v TEMPLATE
 cat > $CF_1000v << EOF
 !
 vlan $VLAN
@@ -455,16 +457,10 @@ port-profile type vethernet VLAN$VLAN
 !
 !
 EOF
-
-  dprint "<- exiting generate_1000v_config"
 }
 
-
-
 function generate_5k_config {
-  dprint "-> entering generate_5k_config"
-
-# CHANGE_ME 5k TEMPLATE
+					# CHANGE_ME 5k TEMPLATE
 cat > $CF_5K << EOF
 !
 vlan $VLAN
@@ -480,14 +476,10 @@ int port-channel 201 - 202
 EOF
   fi
 
-  dprint "<- exiting generate_5k_config"
 }
 
-
 function generate_fi_config {
-  dprint "-> entering generate_fi_config"
-
-# CHANGE_ME FI TEMPLATE
+					# CHANGE_ME FI TEMPLATE
 cat > $CF_FI << EOF
 scope eth-uplink
 create vlan VLAN$VLAN $VLAN
@@ -525,20 +517,16 @@ exit
 exit
 EOF
   fi
-
-  dprint "<- exiting generate_fi_config"
 }
 
 
 
 function generate_core_config {
-  TMP=$TMPDIR/temp-core.config
-
-  dprint "-> entering generate_core_config"
+  local TMP=$TMPDIR/temp-core.config
 
   for (( i=1; i<=2; i++ )) do 
 
-# CHANGE_ME 7k TEMPLATE
+					# CHANGE_ME 7k TEMPLATE
 cat > $TMP << EOF
 !
 vlan $VLAN
@@ -579,10 +567,8 @@ EOF
       dprint "mv $TMP $CF_CORE02"
       mv $TMP $CF_CORE02
     fi
-
+  
   done # for 1,2
-
-  dprint "<- exiting generate_core_config"
 }
 
 function print_header {
@@ -596,7 +582,6 @@ echo "
 }
 
 function read_correct {
-
   if [ $VERIFY_INFO -eq 1 ]; then 
     while :; do
       read -e -r -p "You entered $1, does this look correct? (Y/n): " SEL
@@ -617,117 +602,120 @@ function read_correct {
 
 
 function gather_user_info {
-  while :; do
-    echo
-    read -e -r -p "Username: " USER
+  if [ $USER_INFO -ne 1 ]; then 
+    while :; do
+      echo
+      read -e -r -p "Username: " USER
 
-    if read_correct $USER; then 
-      break;
-    fi
-  done
+      if read_correct $USER; then 
+        break;
+      fi
+    done
 
-  dprint "Username ($USER)"
+    dprint "Username ($USER)"
 
-  while :; do
-    echo
-    read -e -r -s -p "Password: " PASSWORD
-    echo
-    read -e -r -s -p "Verify Password: " PASSWORD2
-    echo
+    while :; do
+      echo
+      read -e -r -s -p "Password: " PASSWORD
+      echo
+      read -e -r -s -p "Verify Password: " PASSWORD2
+      echo
 
-    if [ "$PASSWORD" == "$PASSWORD2" ]; then
-      dprint "Passwords match... "
-      break;
-    else 
-      dprint "Password error..."
-    fi
+      if [ "$PASSWORD" == "$PASSWORD2" ]; then
+        dprint "Passwords match... "
+        break;
+      else 
+        dprint "Password error..."
+      fi
 
-  done
+    done
 
-  USERNAME=$USER
-
+    USERNAME=$USER
+    USER_INFO=1
+  fi
 }
 
 
 function gather_info {
+  if [ $PRE_CONFIG -ne 1 ]; then 
 
-  print_header
+    print_header
 
-  echo "##   Valid Sites"
-  echo "##      $VALID_SITES" 
-  echo "##"
+    echo "##   Valid Sites"
+    echo "##      $VALID_SITES" 
+    echo "##"
 
-
-  while :; do
     while :; do
-      echo
-      read -e -r -p "What site are we making changes at?: " SITE
-      for NUM in `echo $VALID_SITES`; do
-        if [[ $SITE == $NUM ]]; then
-          break 2;
-        fi
+      while :; do
+        echo
+        read -e -r -p "What site are we making changes at?: " SITE
+        for NUM in `echo $VALID_SITES`; do
+          if [[ $SITE == $NUM ]]; then
+            break 2;
+          fi
+        done
       done
-    done
 
-  if read_correct $SITE; then 
-    break;
-  fi
-
-  done
- 
-  dprint "SiteCode ($SITE)"
-
-
-  while :; do
-    while :; do
-      echo
-      read -e -r -p "What VLAN number are we adding ?: " VLAN
-      if [[ $VLAN =~ ^[0-9]+$ ]]; then
-        if [[ $VLAN -ge 1 && $VLAN -le 4096 ]]; then 
-          break
-        fi
-      fi
-      echo "Valid range 1-4096..."
-    done
-  
-    if read_correct $VLAN; then 
+    if read_correct $SITE; then 
       break;
     fi
 
-  done 
+    done
+ 
+    dprint "SiteCode ($SITE)"
 
-  dprint "VLAN ($VLAN)"
-
-  while :; do
-    while :; do
-      echo 
-      read -e -r -p "What is the description for this VLAN?: " DESC
-      case $DESC in  
-
-        *\ * ) 
-          echo "no spaces allowed..." 
-          ;;
-
-        *) 
-          if [ ${#DESC} -gt 32 ]; then 
-            echo "must be less than 32 characters..."
-          else 
+      while :; do
+      while :; do
+        echo
+        read -e -r -p "What VLAN number are we adding ?: " VLAN
+        if [[ $VLAN =~ ^[0-9]+$ ]]; then
+          if [[ $VLAN -ge 1 && $VLAN -le 4096 ]]; then 
             break
           fi
-          ;;
+        fi
+        echo "Valid range 1-4096..."
+      done
+    
+      if read_correct $VLAN; then 
+        break;
+      fi
+  
+    done 
+  
+    dprint "VLAN ($VLAN)"
+  
+    while :; do
+      while :; do
+        echo 
+        read -e -r -p "What is the description for this VLAN?: " DESC
+        case $DESC in  
+  
+          *\ * ) 
+            echo "no spaces allowed..." 
+            ;;
+  
+          *) 
+            if [ ${#DESC} -gt 32 ]; then 
+              echo "must be less than 32 characters..."
+            else 
+              break
+            fi
+            ;;
 
-      esac
+        esac
+      done
+
+      if read_correct $DESC; then 
+        break;
+      fi
+  
     done
-
-    if read_correct $DESC; then 
-      break;
-    fi
-
-  done
-
-  dprint "VLAN Description ($DESC)"
+  
+    dprint "VLAN Description ($DESC)"
+    PRE_CONFIG=1
+  fi
 }
-
+  
 function valid_ip() {
   local  ip=$1
   local  stat=1
@@ -771,8 +759,8 @@ function gather_ip_info {
           echo
           read -e -r -p "Enter the network address in CIDR format: " INPUT
   
-          HOSTS=`ipcalc $INPUT | awk '/Hosts/{ print $2 }'`
-          CIDR=`ipcalc $INPUT | awk '/Network/{ print $2 }'`
+          HOSTS=`$IPCALC $INPUT | awk '/Hosts/{ print $2 }'`
+          CIDR=`$IPCALC $INPUT | awk '/Network/{ print $2 }'`
           NETWORK=`echo $CIDR | cut -d / -f1`
   
           dprint "number of hosts calculated: $HOSTS"
@@ -840,8 +828,6 @@ while :; do
     [yY][eE][sS]|[yY]|"") 
 
       gather_info
-      PRE_CONFIG=1
-
       gather_ip_info
       generate_core_config
 
@@ -877,8 +863,6 @@ while :; do
 
         [yY][eE][sS]|[yY]) 
           gather_user_info
-          USER_INFO=1
-
 
 	  dprint "core01 10.$SITE.$MGMT_IP_CORE01"
 	  dprint "core02 10.$SITE.$MGMT_IP_CORE02"
@@ -950,10 +934,7 @@ while :; do
 
     [yY][eE][sS]|[yY]|"") 
 
-      if [ $PRE_CONFIG -ne 1 ]; then 
-        gather_info
-        PRE_CONFIG=1
-      fi
+      gather_info
 
       while :; do
 
@@ -1003,10 +984,8 @@ while :; do
         read -e -r -p "Would you like me to apply these changes to the 5k switches? (y/N): " SEL
         case $SEL in
           [yY][eE][sS]|[yY]) 
-            if [ $USER_INFO -ne 1 ]; then 
-              gather_user_info
-              USER_INFO=1
-            fi
+
+            gather_user_info
   
             check_existing_config 10.$SITE.$MGMT_IP_5K01 5k
             check_existing_config 10.$SITE.$MGMT_IP_5K02 5k
@@ -1077,12 +1056,9 @@ while :; do  # main
 
     [yY][eE][sS]|[yY]|"")
 
-      if [ $PRE_CONFIG -ne 1 ]; then
-        gather_info
-        PRE_CONFIG=1
-      fi
+      gather_info
 
-      for NUM in `echo $SITES_WITH_TWO`; do
+      for NUM in `echo $MULTI_CLUSTER_SITES`; do
         if [[ $SITE == $NUM ]]; then
 
           echo 
@@ -1141,10 +1117,8 @@ while :; do  # main
         read -e -r -p "Would you like me to apply these changes to the UCS Fabric Interconnects? (y/N): " SEL
         case $SEL in
           [yY][eE][sS]|[yY])
-            if [ $USER_INFO -ne 1 ]; then
-              gather_user_info
-              USER_INFO=1
-            fi
+
+            gather_user_info
 	    
             # Change USERNAME for FI login...
             USERNAME="ucs-TACACS\\\\$USER"
@@ -1206,10 +1180,7 @@ while :; do
   read -e -r -p "Generate VLAN Configuration / Port Profile for the 1000v ? (Y/n): " SEL
   case $SEL in
     [yY][eE][sS]|[yY]|"") 
-      if [ $PRE_CONFIG -ne 1 ]; then 
-        gather_info
-        PRE_CONFIG=1
-      fi
+      gather_info
       generate_1000v_config
 
       while :; do
@@ -1231,14 +1202,13 @@ while :; do
       while :; do # apply loop
         echo
         read -e -r -p "Would you like me to apply these changes to the 1000v? (y/N): " SEL
+
         case $SEL in
           [yY][eE][sS]|[yY]) 
-            if [ $USER_INFO -ne 1 ]; then 
-              gather_user_info
-              USER_INFO=1
-            fi
+            
+            gather_user_info
 
-            for NUM in `echo $SITES_WITH_TWO`; do
+            for NUM in `echo $MULTI_CLUSTER_SITES`; do
               if [[ $SITE == $NUM ]]; then
 
                 echo 
