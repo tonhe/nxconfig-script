@@ -7,9 +7,9 @@ SYNOPSIS
 DESCRIPTION
 	The Nexus Configuration Tool was spawned out of the neccessity of consitant 
 	configuration between devices. This tool generates configurations for Nexus 
-	7k, 5k, 1000v and soon UCS Fabric Interconnects. The tool also generates 
+	7k, 5k, 1000v and UCS Fabric Interconnects. The tool also generates 
 	and executes expect scripts, and does minimal error checkingbefore deploying
 	the configuration to your devices.
 
-	The script needs to be customized for individual enviornments so please take
-	a look at the generate_ functions.
+	The script needs to be customized for individual enviornments so please take 
+        time to look at the variables, and the generate_ functions.
