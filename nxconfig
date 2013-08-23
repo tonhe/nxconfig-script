@@ -31,25 +31,25 @@ IPCALC=/usr/bin/ipcalc
 #    2. You use the same management IPs between sites.
 #    4. You understand 1-3
 #
-VALID_SITES="254 248"
-MGMT_IP_CORE01="195.0"  # Last two octets
-MGMT_IP_CORE02="195.1" 
-MGMT_IP_5K01="194.10"
-MGMT_IP_5K02="194.11" 
-MGMT_IP_FI="196.13"
-MGMT_IP_1000V01="196.16"
+VALID_SITES="10 20"
+MGMT_IP_CORE01="19.1"  # Last two octets
+MGMT_IP_CORE02="19.2" 
+MGMT_IP_5K01="19.11"
+MGMT_IP_5K02="19.12" 
+MGMT_IP_FI="19.20"
+MGMT_IP_1000V01="19.30"
 
 # UCS FI vNIC Templates
-vNIC_CLUSTER01A="ESX-vNIC-FabricA"
-vNIC_CLUSTER01B="ESX-vNIC-FabricB"
+vNIC_CLUSTER01A="vNIC-FabricA"
+vNIC_CLUSTER01B="vNIC-FabricB"
 
 # Multiple Clusters -- I also assume multiple 1000v's here... 
-MULTI_CLUSTER_SITES="254"
-MGMT_IP_1000V02="196.17"
-vNIC_CLUSTER02A="ESX2-vNIC-A"
-vNIC_CLUSTER02B="ESX2-vNIC-B"
+MULTI_CLUSTER_SITES="20"
+MGMT_IP_1000V02="19.31"
+vNIC_CLUSTER02A="vNIC-FabricA"
+vNIC_CLUSTER02B="vNIC-FabricB"
 DESC_CLUSTER01="UCS B230 M1 Cluster 01"
-DESC_CLUSTER02="UCS B230 M2 HP Cluster 02"
+DESC_CLUSTER02="UCS B230 M2 Cluster 02"
 
 
 # working directory
@@ -550,7 +550,7 @@ cat >> $TMP << EOF
   hsrp version 2
   hsrp $VLAN
     ip $IP_HSRP
-    authentication md5 key-chain tcu-hsrp
+    authentication md5 key-chain key-hsrp
     preempt delay minimum 180
 EOF
 
