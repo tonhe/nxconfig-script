@@ -13,10 +13,10 @@ VERSION=0.7.8
 # the script to fit your needs.
 #
 ######## variables
-DEBUG=0   # Displays Debug Information
+DEBUG=1   # Displays Debug Information
 VERIFY_INFO=0 # Requires most inputs to be verified
 DELETE_ON_EXIT=1  # Deletes data files created (more secure)
-ALLOW_DEVICE_CONFIG=1 # Allows this script to make changes to devices
+ALLOW_DEVICE_CONFIG=0 # Allows this script to make changes to devices
 
 # This script requires Bash, Expect, and ipcalc
 EXPECT=/usr/bin/expect
@@ -83,29 +83,51 @@ function dprint {
 function run_config_script  {
  local SCRIPT=${1}
 
- [[ $ALLOW_DEVICE_CONFIG -eq 1 ]] && $EXPECT -f $SCRIPT
+ if [[ $ALLOW_DEVICE_CONFIG -eq 1 ]]; then
 
- EC=$? ## store the exit code.
+   $EXPECT -f $SCRIPT
 
- # Read the exit code of EXPECT, if it isn't 0 there was an issue... 
- if [ $EC -ne 0 ] ; then
-   echo 
-   echo 
-   echo 
-   echo "***NOTICE***"
-   echo
-   echo
-   echo "Houston, we have a problem."
-   echo
-   echo "Something went wrong while executing our expect script. Some configuration changes"
-   echo "may of been made. Check the output above for more information."
-   echo
-   echo 
-   echo "GAME OVER"
-   echo
-   echo
-   echo
-   exit 1
+   EC=$? ## store the exit code.
+
+   # Read the exit code of EXPECT, if it isn't 0 there was an issue... 
+   if [ $EC -ne 0 ] ; then
+     echo 
+     echo 
+     echo 
+     echo "***NOTICE***"
+     echo
+     echo
+     echo "Houston, we have a problem."
+     echo
+     echo "Something went wrong while executing our expect script. Some configuration changes"
+     echo "may of been made. Check the output above for more information."
+     echo
+     echo 
+     echo "GAME OVER"
+     echo
+     echo
+     echo
+     exit 1
+    fi
+
+  else 
+     echo 
+     echo 
+     echo 
+     echo "***NOTICE***"
+     echo
+     echo
+     echo "Device Execution Not Allowed"
+     echo
+     echo "Currently ALLOW_DEVICE_EXECUTION is set to 0 which disabled this scripts ability"
+     echo "to make configuration changes. "
+     echo
+     echo
+     echo
+     echo
+     echo "your script already in progress will now continue..."
+     echo
+     echo
   fi
 }
 
